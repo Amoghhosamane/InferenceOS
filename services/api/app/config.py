@@ -18,8 +18,12 @@ class Settings(BaseSettings):
     VLLM_BASE_URL: str = "http://localhost:8001/v1"
     VLLM_API_KEY: str = ""
     
-    # Database URL
+    # Database URL: Supports PostgreSQL (postgresql+asyncpg://...) or SQLite (sqlite+aiosqlite://...)
     DATABASE_URL: str = "sqlite+aiosqlite:///./inferenceos.db"
+    
+    # Redis configuration for caching and distributed token-bucket rate limiting
+    REDIS_URL: str = ""
+    ENABLE_REDIS_CACHE: bool = False
     
     # CORS
     CORS_ORIGINS: List[str] = [

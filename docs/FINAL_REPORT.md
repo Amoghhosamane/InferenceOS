@@ -35,13 +35,15 @@
 ```powershell
 $env:PYTHONPATH="C:\Desktop\gitProjects\Interference\services\api"; py -m pytest services\api\tests -v
 ```
-**Results:** **18 passed in 1.31s (100% Pass Rate)**
+**Results:** **20 passed in 2.05s (100% Pass Rate)**
 - `test_health_endpoint`: **PASS**
 - `test_models_endpoint`: **PASS**
 - `test_chat_stream_mock`: **PASS**
 - `test_chat_stream_rejects_paid_or_unknown_model`: **PASS**
 - `test_metrics_endpoint`: **PASS**
 - `test_conversations_crud`: **PASS**
+- `test_cache_ratelimit.py::test_in_memory_rate_limiter`: **PASS**
+- `test_cache_ratelimit.py::test_cache_fallback`: **PASS**
 - `test_inception_adapter_missing_key_behavior`: **PASS**
 - `test_mock_adapter_stream`: **PASS**
 - `test_mock_models_free_eligible`: **PASS**

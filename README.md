@@ -87,7 +87,9 @@ InferenceOS was designed and implemented adhering to production software enginee
 | **Frontend UI** | Next.js 15.1, React 19, TypeScript | Gemini-inspired minimalist interface, light/dark themes, collapsible history drawer, auto-resizing composer, multi-model comparison view. |
 | **Styling** | Tailwind CSS | Mobile-first responsive layout (375px, 768px, 1280px, 1920px), dynamic safe areas (`100dvh`), custom subtle scrollbars. |
 | **Backend Gateway** | FastAPI, Python 3.13, Uvicorn | Async provider adapters, SSE streaming via `sse-starlette`, intelligent fallback routing, microsecond telemetry. |
-| **Database** | SQLite via `aiosqlite` | Asynchronous local conversation and message persistence with foreign key cascade deletion. |
+| **Database** | PostgreSQL + SQLAlchemy (Async) | Production asynchronous ORM via `asyncpg` with zero-dependency `sqlite+aiosqlite` local fallback. |
+| **Migrations** | Alembic | Version-controlled declarative schema migrations with autogeneration support. |
+| **Cache & Rate Limiting** | Redis (`redis.asyncio`) | Distributed sliding-window token bucket rate limiter and response caching with automatic memory fallback. |
 | **Model Registry** | Pydantic V2 | Strict allowlisting failing closed on unknown pricing or eligibility. |
 | **CI/CD** | GitHub Actions | Automated multi-stage validation pipeline running pytest and Next.js static builds. |
 

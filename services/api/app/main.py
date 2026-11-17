@@ -6,7 +6,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from app.config import settings
 from app.routers.api import api_router
-from app.services.history import init_db
+from app.services.db import init_db
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
