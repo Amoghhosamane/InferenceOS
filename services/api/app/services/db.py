@@ -33,12 +33,16 @@ class MessageModel(Base):
 
     conversation = relationship("ConversationModel", back_populates="messages")
 
-# Asynchronous engine configuration
+# Asynchronous engine configuration with connection pooling
+# If using PostgreSQL on Render/Cloud, pool_size and max_overflow optimize connection lifecycle
+is_sqlite = "sqlite" in settings.DATABASE_URL
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
     pool_pre_ping=True,
+    **({"pool_size": 10, "max_overflow": 20} if not is_sqlite else {})
 )
 
 AsyncSessionLocal = async_sessionmaker(

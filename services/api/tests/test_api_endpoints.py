@@ -13,6 +13,16 @@ async def test_health_endpoint():
     assert "mock_mode" in data
 
 @pytest.mark.asyncio
+async def test_ready_endpoint():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/api/v1/ready")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ready"
+    assert data["database"] == "connected"
+
+@pytest.mark.asyncio
 async def test_models_endpoint():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

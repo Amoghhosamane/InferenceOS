@@ -25,7 +25,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
     ENABLE_REDIS_CACHE: bool = False
     
-    # CORS
+    # CORS & Frontend URLs
+    FRONTEND_URL: str = "http://localhost:3000"
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",

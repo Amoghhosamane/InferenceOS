@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: inferenceos-api
+    runtime: python
+    buildCommand: "cd services/api && pip install -r requirements.txt && alembic upgrade head"
+    startCommand: "cd services/api && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: MOCK_MODE
+        value: "true"
+      - key: FREE_MODE_ONLY
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: inferenceos-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: inferenceos-redis
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: INCEPTION_API_KEY
+        sync: false
+
+databases:
+  - name: inferenceos-db
+    plan: free
+
+  - type: redis
+    name: inferenceos-redis
+    plan: free
+    ipAllowList: [] # only accessible by internal services

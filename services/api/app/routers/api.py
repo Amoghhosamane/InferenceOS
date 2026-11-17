@@ -32,6 +32,37 @@ async def health_check():
         }
     }
 
+@api_router.get("/ready")
+async def readiness_check():
+    """Readiness probe checking database connectivity and Redis availability."""
+    from app.services.db import engine
+    from app.services.cache import cache_service
+    from sqlalchemy import text
+
+    db_ready = False
+    redis_ready = False
+
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        db_ready = True
+    except Exception as e:
+        db_ready = False
+
+    try:
+        redis = await cache_service.get_redis()
+        redis_ready = bool(redis is not None)
+    except Exception:
+        redis_ready = False
+
+    status_code = 200 if db_ready else 503
+    return {
+        "status": "ready" if db_ready else "not_ready",
+        "database": "connected" if db_ready else "disconnected",
+        "redis": "connected" if redis_ready else "memory_fallback",
+        "mock_mode": settings.MOCK_MODE,
+    }
+
 @api_router.get("/models", response_model=ModelListResponse)
 async def list_models():
     models_list = list(VERIFIED_FREE_MODELS.values())
