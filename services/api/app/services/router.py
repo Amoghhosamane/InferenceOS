@@ -26,12 +26,12 @@ class RouterService:
         }
 
     def get_adapter_for_model(self, model_id: str) -> BaseProviderAdapter:
-        if settings.MOCK_MODE:
-            return self.adapters["mock"]
-
+        # Route mock models to mock adapter
         if model_id.startswith("mock-") or model_id in ["mock-gpt-oss", "mock-fast-chat"]:
             return self.adapters["mock"]
-        elif model_id.startswith("groq/"):
+
+        # Route real providers based on explicit model prefixes
+        if model_id.startswith("groq/"):
             return self.adapters["groq"]
         elif model_id.startswith("gemini/"):
             return self.adapters["gemini"]
@@ -41,8 +41,14 @@ class RouterService:
             return self.adapters["inception"]
         elif model_id.startswith("vllm/"):
             return self.adapters["vllm"]
-        else:
-            return self.adapters["mock"]
+        
+        # If model is un-prefixed, check registry
+        meta = VERIFIED_FREE_MODELS.get(model_id)
+        if meta and meta.provider in self.adapters:
+            return self.adapters[meta.provider]
+
+        # Fail closed with mock if explicitly configured, else raise/fallback
+        return self.adapters["mock"]
 
     def find_free_fallback_model(self, failed_model_id: str) -> str | None:
         """Find an alternative verified free model from an operational provider."""

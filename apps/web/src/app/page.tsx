@@ -14,6 +14,7 @@ import {
   createConversation,
   deleteConversation,
   streamChat,
+  streamCompare,
 } from "@/lib/api";
 import { ModelMetadata, Conversation, ChatMessage, StreamChunk } from "@/lib/types";
 
@@ -26,7 +27,7 @@ export default function Home() {
   // Models & State
   const [models, setModels] = useState<ModelMetadata[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("mock-gpt-oss");
-  const [mockMode, setMockMode] = useState(true);
+  const [mockMode, setMockMode] = useState(false);
 
   // Conversations
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -47,8 +48,11 @@ export default function Home() {
     content: string;
     latency_ms?: number;
     ttft_ms?: number;
+    tokens?: number;
+    tokens_per_sec?: number;
     error?: string;
   }>>({});
+  const compareAbortRef = useRef<AbortController | null>(null);
 
   // Theme synchronization
   useEffect(() => {
@@ -68,7 +72,7 @@ export default function Home() {
         setMockMode(modelData.mock_mode);
         if (modelData.models.length > 0) {
           setSelectedModel(modelData.models[0].id);
-          // Set initial compare models (up to 3)
+          // Set initial compare models: 2 models by default
           setCompareModels(modelData.models.slice(0, 2).map((m) => m.id));
         }
 
@@ -154,11 +158,15 @@ export default function Home() {
     abortControllerRef.current = controller;
     const startTime = performance.now();
     let accumulatedText = "";
+    let firstTokenTime: number | undefined;
 
     await streamChat(
       selectedModel,
       newMessages,
       (chunk: StreamChunk) => {
+        if (chunk.time_to_first_token_ms && !firstTokenTime) {
+          firstTokenTime = chunk.time_to_first_token_ms;
+        }
         if (chunk.error) {
           accumulatedText += `\n[Error: ${chunk.error}]`;
         } else if (chunk.delta.content) {
@@ -178,6 +186,7 @@ export default function Home() {
               content: accumulatedText,
               model: selectedModel,
               latency_ms: totalDuration,
+              time_to_first_token_ms: firstTokenTime,
               created_at: Date.now(),
             },
           ]);
@@ -199,7 +208,8 @@ export default function Home() {
         ]);
         setStreamingContent("");
       },
-      controller.signal
+      controller.signal,
+      false // No silent fallback
     );
   };
 
@@ -224,79 +234,145 @@ export default function Home() {
     setStreamingContent("");
   };
 
-  // Compare Mode: Toggle Model
-  const handleToggleCompareModel = (id: string) => {
-    if (compareModels.includes(id)) {
-      if (compareModels.length > 2) {
-        setCompareModels(compareModels.filter((m) => m !== id));
-      }
-    } else {
-      if (compareModels.length < 3) {
-        setCompareModels([...compareModels, id]);
-      }
+  // Compare Mode: Add model (up to 3)
+  const handleAddCompareModel = (id: string) => {
+    if (compareModels.length < 3 && !compareModels.includes(id)) {
+      setCompareModels([...compareModels, id]);
     }
   };
 
-  // Compare Mode: Run
+  // Compare Mode: Remove model (min 2)
+  const handleRemoveCompareModel = (id: string) => {
+    if (compareModels.length > 2) {
+      setCompareModels(compareModels.filter((m) => m !== id));
+    }
+  };
+
+  // Compare Mode: Run unified multi-model stream
   const handleRunCompare = async () => {
     if (!comparePrompt.trim() || isComparing || compareModels.length < 2) return;
 
     setIsComparing(true);
+    // Explicit requirement: Clear the previous run's metrics before starting a new comparison
     const initialRes: Record<string, { content: string }> = {};
     compareModels.forEach((id) => {
       initialRes[id] = { content: "" };
     });
     setCompareResults(initialRes);
 
-    const promises = compareModels.map(async (modelId) => {
-      const startTime = performance.now();
-      let text = "";
-      let firstTokenTime: number | undefined;
+    const controller = new AbortController();
+    compareAbortRef.current = controller;
+    const startTimes: Record<string, number> = {};
+    compareModels.forEach(id => { startTimes[id] = performance.now(); });
 
-      await streamChat(
-        modelId,
-        [{ role: "user", content: comparePrompt }],
-        (chunk: StreamChunk) => {
-          if (chunk.time_to_first_token_ms && !firstTokenTime) {
-            firstTokenTime = chunk.time_to_first_token_ms;
-          }
+    await streamCompare(
+      compareModels,
+      [{ role: "user", content: comparePrompt }],
+      (chunk: StreamChunk) => {
+        const targetModel = chunk.model;
+        if (!targetModel) return;
+
+        setCompareResults((prev) => {
+          const current = prev[targetModel] || { content: "" };
+          let updatedText = current.content;
+
           if (chunk.error) {
-            text += `\n[Error: ${chunk.error}]`;
-          } else if (chunk.delta.content) {
-            text += chunk.delta.content;
+            return {
+              ...prev,
+              [targetModel]: {
+                ...current,
+                error: chunk.error,
+              }
+            };
           }
-          setCompareResults((prev) => ({
+
+          if (chunk.delta.content) {
+            updatedText += chunk.delta.content;
+          }
+
+          const elapsed = (performance.now() - (startTimes[targetModel] || performance.now())) / 1000;
+          const words = updatedText.trim().split(/\s+/).filter(Boolean).length;
+          const tokPerSec = elapsed > 0 ? (words * 1.3) / elapsed : 0;
+
+          return {
+            ...prev,
+            [targetModel]: {
+              content: updatedText,
+              latency_ms: performance.now() - (startTimes[targetModel] || performance.now()),
+              ttft_ms: chunk.time_to_first_token_ms || current.ttft_ms,
+              tokens: chunk.usage?.completion_tokens || words,
+              tokens_per_sec: tokPerSec > 0 ? tokPerSec : undefined,
+              error: current.error,
+            }
+          };
+        });
+      },
+      () => {
+        setIsComparing(false);
+        compareAbortRef.current = null;
+      },
+      (err) => {
+        setIsComparing(false);
+        compareAbortRef.current = null;
+        console.error("Comparison broadcast error", err);
+      },
+      controller.signal
+    );
+  };
+
+  // Compare Mode: Retry a single failed model
+  const handleRetryModel = async (modelId: string) => {
+    if (!comparePrompt.trim()) return;
+
+    setCompareResults(prev => ({
+      ...prev,
+      [modelId]: { content: "" }
+    }));
+
+    const start = performance.now();
+    let text = "";
+    let firstTokenTime: number | undefined;
+
+    await streamChat(
+      modelId,
+      [{ role: "user", content: comparePrompt }],
+      (chunk: StreamChunk) => {
+        if (chunk.time_to_first_token_ms && !firstTokenTime) {
+          firstTokenTime = chunk.time_to_first_token_ms;
+        }
+        if (chunk.error) {
+          setCompareResults(prev => ({
+            ...prev,
+            [modelId]: { content: "", error: chunk.error }
+          }));
+        } else if (chunk.delta.content) {
+          text += chunk.delta.content;
+          setCompareResults(prev => ({
             ...prev,
             [modelId]: {
               content: text,
               ttft_ms: firstTokenTime,
-            },
-          }));
-        },
-        () => {
-          const lat = performance.now() - startTime;
-          setCompareResults((prev) => ({
-            ...prev,
-            [modelId]: {
-              ...prev[modelId],
-              latency_ms: lat,
-            },
-          }));
-        },
-        (err) => {
-          setCompareResults((prev) => ({
-            ...prev,
-            [modelId]: {
-              content: "",
-              error: err,
-            },
+            }
           }));
         }
-      );
-    });
-
-    await Promise.all(promises);
-    setIsComparing(false);
+      },
+      () => {
+        const lat = performance.now() - start;
+        setCompareResults(prev => ({
+          ...prev,
+          [modelId]: {
+            ...prev[modelId],
+            latency_ms: lat,
+          }
+        }));
+      },
+      (err) => {
+        setCompareResults(prev => ({
+          ...prev,
+          [modelId]: { content: "", error: err }
+        }));
+      }
+    );
   };
 
   return (
@@ -333,7 +409,7 @@ export default function Home() {
             {mockMode && (
               <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                Mock Mode (Zero-Cost / Offline)
+                Mock Mode
               </span>
             )}
           </div>
@@ -341,9 +417,9 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsCompareMode(!isCompareMode)}
-              className={`text-xs px-3 py-1.5 rounded-full font-medium transition ${
+              className={`text-xs px-3.5 py-1.5 rounded-full font-medium transition ${
                 isCompareMode
-                  ? "bg-blue-600 text-white"
+                  ? "bg-blue-600 text-white shadow-xs"
                   : "border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-main)]"
               }`}
             >
@@ -357,12 +433,15 @@ export default function Home() {
           <CompareView
             models={models}
             selectedModels={compareModels}
-            onToggleModel={handleToggleCompareModel}
+            onToggleModel={() => {}}
+            onAddModel={handleAddCompareModel}
+            onRemoveModel={handleRemoveCompareModel}
             prompt={comparePrompt}
             onPromptChange={setComparePrompt}
             onRunCompare={handleRunCompare}
             isComparing={isComparing}
             results={compareResults}
+            onRetryModel={handleRetryModel}
           />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">

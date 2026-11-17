@@ -26,14 +26,14 @@ VERIFIED_FREE_MODELS: Dict[str, ModelMetadata] = {
         pricing_status="verified_free"
     ),
 
-    # Groq Free Tier Models: GPT-OSS and Qwen models on eligible free tier
+    # Groq Free Tier Models: GPT-OSS, Qwen, and active Groq endpoints
     "groq/openai/gpt-oss-20b": ModelMetadata(
         id="groq/openai/gpt-oss-20b",
         name="Groq OpenAI GPT-OSS 20B",
         provider="groq",
         free_tier=True,
         context_length=131072,
-        description="High-throughput open-weight Mixture-of-Experts model on Groq free tier.",
+        description="Flagship open-weight Mixture-of-Experts 20B model on Groq free tier.",
         is_available=True,
         pricing_status="verified_free"
     ),
@@ -63,7 +63,7 @@ VERIFIED_FREE_MODELS: Dict[str, ModelMetadata] = {
         provider="groq",
         free_tier=True,
         context_length=128000,
-        description="Groq-accelerated flagship Llama 3.3 model on Groq Cloud free tier.",
+        description="Flagship Llama 3.3 70B model with high-speed LPU inference on Groq.",
         is_available=True,
         pricing_status="verified_free"
     ),
@@ -73,19 +73,29 @@ VERIFIED_FREE_MODELS: Dict[str, ModelMetadata] = {
         provider="groq",
         free_tier=True,
         context_length=128000,
-        description="Sub-second low latency Llama 3.1 8B model on Groq Cloud free tier.",
+        description="Sub-second low latency Llama 3.1 8B model on Groq.",
         is_available=True,
         pricing_status="verified_free"
     ),
 
     # Google Gemini Free Tier Models (via Google AI Studio)
+    "gemini/gemini-2.5-flash": ModelMetadata(
+        id="gemini/gemini-2.5-flash",
+        name="Gemini 2.5 Flash",
+        provider="gemini",
+        free_tier=True,
+        context_length=1048576,
+        description="Google primary high-efficiency Flash model with thinking capability on AI Studio free tier.",
+        is_available=True,
+        pricing_status="verified_free"
+    ),
     "gemini/gemini-2.0-flash": ModelMetadata(
         id="gemini/gemini-2.0-flash",
         name="Gemini 2.0 Flash",
         provider="gemini",
         free_tier=True,
         context_length=1048576,
-        description="Google next-gen multimodal model with 1M context on AI Studio free tier.",
+        description="Google multimodal 2.0 model with 1M context on AI Studio free tier.",
         is_available=True,
         pricing_status="verified_free"
     ),
@@ -95,7 +105,7 @@ VERIFIED_FREE_MODELS: Dict[str, ModelMetadata] = {
         provider="gemini",
         free_tier=True,
         context_length=1048576,
-        description="Fast, versatile high-efficiency Google model on AI Studio free tier.",
+        description="Versatile high-efficiency Google model on AI Studio free tier.",
         is_available=True,
         pricing_status="verified_free"
     ),

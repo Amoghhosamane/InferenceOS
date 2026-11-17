@@ -1,4 +1,5 @@
 import { ModelMetadata, Conversation, ChatMessage, MetricsSummary, StreamChunk } from "./types";
+import { createParser, EventSourceMessage } from "eventsource-parser";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -46,6 +47,10 @@ export async function deleteConversation(id: string): Promise<void> {
   await fetch(`${API_BASE}/api/v1/conversations/${id}`, { method: "DELETE" });
 }
 
+/**
+ * Robust Server-Sent Events client using eventsource-parser.
+ * Handles \r\n\r\n, \n\n, chunk fragmentation, multiline payloads, and clean cancellation.
+ */
 export async function streamChat(
   model: string,
   messages: ChatMessage[],
@@ -53,7 +58,7 @@ export async function streamChat(
   onDone: () => void,
   onError: (err: string) => void,
   signal?: AbortSignal,
-  allowFallback = true
+  allowFallback = false
 ) {
   try {
     const res = await fetch(`${API_BASE}/api/v1/chat/stream`, {
@@ -69,7 +74,7 @@ export async function streamChat(
     });
 
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({ detail: "Stream request failed" }));
+      const errJson = await res.json().catch(() => ({ detail: `Error HTTP ${res.status}` }));
       onError(errJson.detail || `Error HTTP ${res.status}`);
       return;
     }
@@ -81,34 +86,107 @@ export async function streamChat(
     }
 
     const decoder = new TextDecoder();
-    let buffer = "";
+    let hasCompleted = false;
+
+    const parser = createParser({
+      onEvent: (event: EventSourceMessage) => {
+        if (event.data === "[DONE]") {
+          hasCompleted = true;
+          onDone();
+          return;
+        }
+        try {
+          const parsed: StreamChunk = JSON.parse(event.data);
+          onChunk(parsed);
+        } catch (e) {
+          console.error("Failed to parse SSE event chunk", e, event.data);
+        }
+      }
+    });
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      const chunkText = decoder.decode(value, { stream: true });
+      parser.feed(chunkText);
+    }
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop() || "";
+    if (!hasCompleted) {
+      onDone();
+    }
+  } catch (err: unknown) {
+    const error = err as { name?: string; message?: string };
+    if (error.name === "AbortError") {
+      onDone();
+    } else {
+      onError(error.message || "Network error");
+    }
+  }
+}
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("data: ")) {
-          const dataStr = trimmed.slice(6).trim();
-          if (dataStr === "[DONE]") {
-            onDone();
-            return;
-          }
-          try {
-            const parsed: StreamChunk = JSON.parse(dataStr);
-            onChunk(parsed);
-          } catch (e) {
-            console.error("Failed to parse stream chunk", e);
-          }
+/**
+ * Stream multiple models in comparison mode using the dedicated unified /chat/compare endpoint.
+ */
+export async function streamCompare(
+  models: string[],
+  messages: ChatMessage[],
+  onChunk: (chunk: StreamChunk) => void,
+  onDone: () => void,
+  onError: (err: string) => void,
+  signal?: AbortSignal
+) {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/chat/compare`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        models,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+      }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({ detail: `Error HTTP ${res.status}` }));
+      onError(errJson.detail || `Error HTTP ${res.status}`);
+      return;
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      onError("Streaming compare response body unreadable");
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let hasCompleted = false;
+
+    const parser = createParser({
+      onEvent: (event: EventSourceMessage) => {
+        if (event.data === "[DONE]") {
+          hasCompleted = true;
+          onDone();
+          return;
+        }
+        try {
+          const parsed: StreamChunk = JSON.parse(event.data);
+          onChunk(parsed);
+        } catch (e) {
+          console.error("Failed to parse SSE compare event", e, event.data);
         }
       }
+    });
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunkText = decoder.decode(value, { stream: true });
+      parser.feed(chunkText);
     }
-    onDone();
+
+    if (!hasCompleted) {
+      onDone();
+    }
   } catch (err: unknown) {
     const error = err as { name?: string; message?: string };
     if (error.name === "AbortError") {

@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Operational modes
-    MOCK_MODE: bool = True
+    # If MOCK_MODE is true, only mock models use mock adapter; real models route to their provider unless explicitly testing mock
+    MOCK_MODE: bool = False
     FREE_MODE_ONLY: bool = True
     
     # Provider Keys (kept strictly on server)
@@ -22,8 +23,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./inferenceos.db"
     
     # Redis configuration for caching and distributed token-bucket rate limiting
-    REDIS_URL: str = ""
+    REDIS_URL: str = "redis://localhost:6379/0"
     ENABLE_REDIS_CACHE: bool = False
+    ENABLE_DISTRIBUTED_RATE_LIMIT: bool = True
+    REDIS_REQUIRED: bool = False
     
     # CORS & Frontend URLs
     FRONTEND_URL: str = "http://localhost:3000"

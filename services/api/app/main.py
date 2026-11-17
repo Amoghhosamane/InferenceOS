@@ -7,6 +7,7 @@ from starlette.responses import Response
 from app.config import settings
 from app.routers.api import api_router
 from app.services.db import init_db
+from app.services.redis_manager import redis_service
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -20,9 +21,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize SQLite schema
+    # Initialize SQLite/PostgreSQL schema
     await init_db()
+    # Initialize shared Redis connection pool
+    await redis_service.initialize()
     yield
+    # Gracefully disconnect Redis
+    await redis_service.close()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
