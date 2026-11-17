@@ -156,10 +156,10 @@ To enable live providers, configure your keys in `.env`:
 MOCK_MODE=false
 FREE_MODE_ONLY=true
 
-GROQ_API_KEY=gsk_...
-GEMINI_API_KEY=AIzaSy...
-OPENROUTER_API_KEY=sk-or-v1-...
-INCEPTION_API_KEY=...
+GROQ_API_KEY
+GEMINI_API_KEY
+OPENROUTER_API_KEY
+INCEPTION_API_KEY
 VLLM_BASE_URL=http://localhost:8001/v1
 ```
 
